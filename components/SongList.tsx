@@ -88,11 +88,11 @@ const SongList: React.FC<SongListProps> = ({ songs, currentSong, onSelect, onAdd
                  disabled={isLoading || !customTitle.trim()}
                  className="w-full py-2 bg-stone-800 text-white text-xs font-bold rounded hover:bg-stone-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                >
-                 {isLoading ? '検索中...' : 'リストに追加して生成'}
+                 {isLoading ? '検索中...' : 'リストに追加して検索'}
                </button>
             </div>
             <p className="text-[10px] text-stone-400 mt-2 text-center">
-              リストに追加され、自動的に歌詞を検索します
+              Webから歌詞を検索し、ふりがなを振ります
             </p>
           </form>
         ) : (
