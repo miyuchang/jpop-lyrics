@@ -73,62 +73,104 @@ export const loadStaticDatabase = async () => {
 };
 
 /**
- * STRATEGY 1: Google Search Grounding
- * High accuracy, real lyrics. Can fail if search results are poor.
+ * STRATEGY 1: Two-Step Search
+ * Step A: Search for raw text only (Accuracy priority)
+ * Step B: Format text to HTML/Ruby (Formatting priority)
  */
-const fetchLyricsViaSearch = async (song: SongItem): Promise<string | null> => {
-  const prompt = `
-    Find **official Japanese lyrics** for "${song.title}" by "${song.artist}" using Google Search.
-    
-    INSTRUCTIONS:
-    1. Extract the FULL lyrics.
-    2. Format as HTML with <ruby> tags for EVERY Kanji.
-    3. Use <br/> for line breaks.
-    4. Output RAW HTML only. No markdown.
-    
-    If not found, return "NOT_FOUND".
-  `;
-
+const fetchLyricsViaSearch = async (song: SongItem, onStatusChange?: (status: string) => void): Promise<string | null> => {
   try {
-    const response = await ai.models.generateContent({
+    // --- Step A: Get Raw Lyrics ---
+    onStatusChange?.("Web検索中 (歌詞データ取得)...");
+    
+    const searchPrompt = `
+      Find the **OFFICIAL Japanese lyrics** for the song "${song.title}" by "${song.artist}".
+      
+      Requirements:
+      1. Return ONLY the lyrics text.
+      2. Do NOT include Romaji.
+      3. Do NOT include translations.
+      4. Ensure you retrieve the FULL song, not just a snippet.
+      5. If there are multiple versions, choose the original full version.
+      
+      If you absolutely cannot find the lyrics, return "NOT_FOUND".
+    `;
+
+    const searchResponse = await ai.models.generateContent({
       model: MODEL_NAME,
-      contents: prompt,
+      contents: searchPrompt,
       config: {
         tools: [{ googleSearch: {} }],
-        temperature: 0.2,
+        temperature: 0.1, // Very low temperature for factual retrieval
       },
     });
 
-    let html = response.text?.trim();
-    if (!html || html.includes("NOT_FOUND")) return null;
+    let rawLyrics = searchResponse.text?.trim();
+    
+    // Basic validation: If result is too short or indicates failure, fallback immediately
+    if (!rawLyrics || rawLyrics.includes("NOT_FOUND") || rawLyrics.length < 50) {
+      console.warn("Search result too short or empty, falling back.");
+      return null;
+    }
 
-    html = html.replace(/^```html/, '').replace(/^```/, '').replace(/```$/, '');
-
-    // Add Source attribution
-    const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+    // Capture sources for attribution
+    const groundingChunks = searchResponse.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
     const sources: string[] = groundingChunks
       .map((chunk: any) => chunk.web?.uri)
       .filter((uri: any): uri is string => typeof uri === 'string');
-    
     const uniqueSources = [...new Set(sources)];
+
+    // --- Step B: Format to Ruby HTML ---
+    onStatusChange?.("Web検索中 (ふりがな付与)...");
+
+    const formatPrompt = `
+      You are a precise formatter.
+      Take the following Japanese lyrics and format them into HTML with Furigana (Ruby tags).
+
+      SOURCE LYRICS:
+      """
+      ${rawLyrics}
+      """
+
+      INSTRUCTIONS:
+      1. Output raw HTML only.
+      2. Add <ruby> tags to **EVERY** Kanji.
+      3. Use <br/> for line breaks.
+      4. Do not change the content of the lyrics, just format them.
+      5. **Check for Ateji**: If the lyrics imply a special reading (e.g., 本気 read as マジ), use that reading.
+    `;
+
+    const formatResponse = await ai.models.generateContent({
+      model: MODEL_NAME,
+      contents: formatPrompt,
+      config: {
+        temperature: 0.2, 
+      },
+    });
+
+    let html = formatResponse.text?.trim();
+    if (!html) return null;
+
+    html = html.replace(/^```html/, '').replace(/^```/, '').replace(/```$/, '');
+
+    // Append Source Attribution
     if (uniqueSources.length > 0) {
       const sourceListHtml = uniqueSources.slice(0, 3)
         .map(url => `<a href="${url}" target="_blank" style="color:#a8a29e;text-decoration:underline;margin-right:10px;">${new URL(url).hostname}</a>`)
         .join('');
-      // Translated "Source:" to "出典:"
-      html += `<div style="margin-top:40px;padding-top:20px;border-top:1px solid #e7e5e4;font-size:0.75rem;color:#a8a29e;"><p>出典:</p>${sourceListHtml}</div>`;
+      html += `<div style="margin-top:40px;padding-top:20px;border-top:1px solid #e7e5e4;font-size:0.75rem;color:#a8a29e;"><p>出典 (Search):</p>${sourceListHtml}</div>`;
     }
 
     return html;
+
   } catch (e) {
-    console.warn(`Search attempt failed for ${song.title}`, e);
+    console.warn(`Search strategy failed for ${song.title}`, e);
     return null;
   }
 };
 
 /**
  * STRATEGY 2: Thinking Model (Generative Fallback)
- * Uses deep thinking to recall lyrics when search fails. Always returns a result.
+ * Uses deep thinking to recall lyrics when search fails.
  */
 const fetchLyricsViaThinking = async (song: SongItem): Promise<string | null> => {
   const prompt = `
@@ -181,13 +223,13 @@ export const fetchLyricsWithRuby = async (song: SongItem, onStatusChange?: (stat
     throw new Error("API Key is missing");
   }
 
-  // 2. Try Search (Best Quality)
-  onStatusChange?.("Web検索中..."); // Searching web
-  const searchResult = await fetchLyricsViaSearch(song);
+  // 2. Try Search (Best Quality for New/Specific Songs)
+  // We pass onStatusChange to let the user know we are searching/formatting
+  const searchResult = await fetchLyricsViaSearch(song, onStatusChange);
   if (searchResult) return searchResult;
 
-  // 3. Fallback to Thinking (Best Reliability)
-  onStatusChange?.("AI生成モードに切り替え中..."); // Switching to AI generation
+  // 3. Fallback to Thinking (Best Reliability if search is blocked or messy)
+  onStatusChange?.("AI生成モードに切り替え中 (Database retrieval)..."); 
   const thinkingResult = await fetchLyricsViaThinking(song);
   if (thinkingResult) return thinkingResult;
 
