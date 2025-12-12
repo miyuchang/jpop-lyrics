@@ -172,10 +172,11 @@ const fetchLyricsViaSearch = async (song: SongItem, onStatusChange?: (status: st
 };
 
 /**
- * STRATEGY 2: Thinking Model (Generative Fallback)
- * Uses deep thinking to recall lyrics when search fails.
+ * STRATEGY 2: Standard Fallback (No Search, No Thinking)
+ * Uses standard generation to recall lyrics when search fails.
+ * Removed "thinkingConfig" as it may cause stability issues on some devices/keys.
  */
-const fetchLyricsViaThinking = async (song: SongItem): Promise<string | null> => {
+const fetchLyricsViaFallback = async (song: SongItem): Promise<string | null> => {
   const prompt = `
     You are a professional lyrics editor.
     Recall and output the **OFFICIAL, FULL VERSION** Japanese lyrics for:
@@ -197,8 +198,7 @@ const fetchLyricsViaThinking = async (song: SongItem): Promise<string | null> =>
       contents: prompt,
       config: {
         temperature: 0.2,
-        thinkingConfig: { thinkingBudget: 2048 }, // Enable thinking for accuracy
-        maxOutputTokens: 8192,
+        // thinkingConfig removed for better stability on mobile/fallback
       },
     });
 
@@ -206,7 +206,7 @@ const fetchLyricsViaThinking = async (song: SongItem): Promise<string | null> =>
     if (!html) return null;
     return html.replace(/^```html/, '').replace(/^```/, '').replace(/```$/, '');
   } catch (e) {
-    console.error(`Thinking attempt failed for ${song.title}`, e);
+    console.error(`Fallback attempt failed for ${song.title}`, e);
     return null;
   }
 };
@@ -228,14 +228,13 @@ export const fetchLyricsWithRuby = async (song: SongItem, onStatusChange?: (stat
   }
 
   // 2. Try Search (Best Quality for New/Specific Songs)
-  // We pass onStatusChange to let the user know we are searching/formatting
   const searchResult = await fetchLyricsViaSearch(song, onStatusChange);
   if (searchResult) return searchResult;
 
-  // 3. Fallback to Thinking (Best Reliability if search is blocked or messy)
-  onStatusChange?.("AI生成モードに切り替え中 (Database retrieval)..."); 
-  const thinkingResult = await fetchLyricsViaThinking(song);
-  if (thinkingResult) return thinkingResult;
+  // 3. Fallback to Standard Generation (Reliable)
+  onStatusChange?.("AI生成モードに切り替え中 (Standard)..."); 
+  const fallbackResult = await fetchLyricsViaFallback(song);
+  if (fallbackResult) return fallbackResult;
 
   throw new Error("Failed to generate lyrics via both Search and AI.");
 };
