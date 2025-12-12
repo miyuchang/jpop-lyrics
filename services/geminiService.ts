@@ -80,19 +80,20 @@ export const loadStaticDatabase = async () => {
 const fetchLyricsViaSearch = async (song: SongItem, onStatusChange?: (status: string) => void): Promise<string | null> => {
   try {
     // --- Step A: Get Raw Lyrics ---
-    onStatusChange?.("Web検索中 (歌詞データ取得)...");
+    onStatusChange?.("Web検索中 (Musixmatch/LyricFind)...");
     
+    // Improved Prompt: STRICTLY Japanese sites, prioritize User requests
     const searchPrompt = `
-      Find the **OFFICIAL Japanese lyrics** for the song "${song.title}" by "${song.artist}".
+      Find the **OFFICIAL Japanese lyrics** (日本語歌詞) for the song "${song.title}" by "${song.artist}".
       
       Requirements:
-      1. Return ONLY the lyrics text.
-      2. Do NOT include Romaji.
-      3. Do NOT include translations.
-      4. Ensure you retrieve the FULL song, not just a snippet.
-      5. If there are multiple versions, choose the original full version.
+      1. **PRIORITY SEARCH**: Search specifically on **Musixmatch**, **LyricFind**, Uta-Net, or J-Lyric.
+      2. **ABSOLUTELY NO ROMAJI**.
+      3. **ABSOLUTELY NO ENGLISH TRANSLATION**.
+      4. Return ONLY the raw Japanese lyrics text.
+      5. Ensure you retrieve the FULL song, not just a snippet.
       
-      If you absolutely cannot find the lyrics, return "NOT_FOUND".
+      If you cannot find the full Japanese lyrics, return "NOT_FOUND".
     `;
 
     const searchResponse = await ai.models.generateContent({
@@ -106,7 +107,7 @@ const fetchLyricsViaSearch = async (song: SongItem, onStatusChange?: (status: st
 
     let rawLyrics = searchResponse.text?.trim();
     
-    // Basic validation: If result is too short or indicates failure, fallback immediately
+    // Basic validation: If result contains mostly English or is too short, fail.
     if (!rawLyrics || rawLyrics.includes("NOT_FOUND") || rawLyrics.length < 50) {
       console.warn("Search result too short or empty, falling back.");
       return null;
@@ -137,6 +138,8 @@ const fetchLyricsViaSearch = async (song: SongItem, onStatusChange?: (status: st
       3. Use <br/> for line breaks.
       4. Do not change the content of the lyrics, just format them.
       5. **Check for Ateji**: If the lyrics imply a special reading (e.g., 本気 read as マジ), use that reading.
+      6. **CLEAN UP**: Remove any weird punctuation, scanning artifacts, '[?]', asterisks, or non-standard symbols often found in raw text. Use standard Japanese punctuation.
+      7. **Validation**: If the SOURCE LYRICS above appear to be English translations or Romaji, output "INVALID_INPUT" instead of formatting.
     `;
 
     const formatResponse = await ai.models.generateContent({
@@ -148,7 +151,7 @@ const fetchLyricsViaSearch = async (song: SongItem, onStatusChange?: (status: st
     });
 
     let html = formatResponse.text?.trim();
-    if (!html) return null;
+    if (!html || html.includes("INVALID_INPUT")) return null;
 
     html = html.replace(/^```html/, '').replace(/^```/, '').replace(/```$/, '');
 
@@ -184,7 +187,8 @@ const fetchLyricsViaThinking = async (song: SongItem): Promise<string | null> =>
     2. Add <ruby> tags to **EVERY** Kanji (e.g. <ruby>汉<rt>かん</rt></ruby>).
     3. Use <br/> for line breaks.
     4. **Think carefully** about special readings (Ateji) used in the song.
-    5. No markdown blocks.
+    5. **CLEAN UP**: Ensure no weird symbols or markdown artifacts appear in the output.
+    6. No markdown blocks.
   `;
 
   try {

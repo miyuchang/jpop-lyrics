@@ -1,14 +1,30 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import SongList from './components/SongList';
 import LyricsPanel from './components/LyricsPanel';
 import LoadingIndicator from './components/LoadingIndicator';
 import { SongItem, AppState, LoadingState } from './types';
 import { fetchLyricsWithRuby, loadStaticDatabase } from './services/geminiService';
-import { SONG_LIST } from './constants';
+import { SONG_LIST as STATIC_SONG_LIST } from './constants';
 
 const CACHE_PREFIX = 'jpop_lyrics_v1_';
+const CUSTOM_SONGS_KEY = 'jpop_custom_songs_v1';
 
 const App: React.FC = () => {
+  // --- Custom Songs State Management ---
+  const [customSongs, setCustomSongs] = useState<SongItem[]>(() => {
+    try {
+      const saved = localStorage.getItem(CUSTOM_SONGS_KEY);
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+
+  // Combine Custom Songs (First) + Static Songs (After)
+  const displaySongList = useMemo(() => {
+    return [...customSongs, ...STATIC_SONG_LIST];
+  }, [customSongs]);
+
   const [state, setState] = useState<AppState>({
     currentSong: null,
     songData: null,
@@ -22,7 +38,7 @@ const App: React.FC = () => {
   const [isPreloading, setIsPreloading] = useState(false);
   const [preloadProgress, setPreloadProgress] = useState({ 
     current: 0, 
-    total: SONG_LIST.length, 
+    total: STATIC_SONG_LIST.length, 
     currentSongName: '',
     statusText: '' 
   });
@@ -40,11 +56,11 @@ const App: React.FC = () => {
     let successCount = 0;
     let failCount = 0;
 
-    for (let i = 0; i < SONG_LIST.length; i++) {
-      const song = SONG_LIST[i];
+    for (let i = 0; i < STATIC_SONG_LIST.length; i++) {
+      const song = STATIC_SONG_LIST[i];
       setPreloadProgress({ 
         current: i + 1, 
-        total: SONG_LIST.length, 
+        total: STATIC_SONG_LIST.length, 
         currentSongName: song.title,
         statusText: 'キャッシュ確認中...'
       });
@@ -140,6 +156,33 @@ const App: React.FC = () => {
     }
   }, []);
 
+  const handleAddCustomSong = useCallback((newSong: SongItem) => {
+    // Check if song already exists in custom list or static list (fuzzy match)
+    const exists = displaySongList.some(s => s.query === newSong.query);
+    
+    if (!exists) {
+      setCustomSongs(prev => {
+        const updated = [newSong, ...prev];
+        localStorage.setItem(CUSTOM_SONGS_KEY, JSON.stringify(updated));
+        return updated;
+      });
+    }
+
+    // Immediately select and start fetching
+    handleSongSelect(newSong);
+  }, [displaySongList, handleSongSelect]);
+
+  const handleRegenerate = useCallback(() => {
+    if (!state.currentSong) return;
+    
+    // 1. Remove specific cache
+    const cacheKey = CACHE_PREFIX + state.currentSong.query;
+    localStorage.removeItem(cacheKey);
+
+    // 2. Trigger fetch again (which naturally ignores cache now)
+    handleSongSelect(state.currentSong);
+  }, [state.currentSong, handleSongSelect]);
+
   const handleBackToList = () => {
     setIsMobileListVisible(true);
   };
@@ -157,8 +200,10 @@ const App: React.FC = () => {
         `}
       >
         <SongList 
+          songs={displaySongList}
           currentSong={state.currentSong}
           onSelect={handleSongSelect}
+          onAdd={handleAddCustomSong}
           isLoading={state.status !== LoadingState.IDLE && state.status !== LoadingState.COMPLETED && state.status !== LoadingState.ERROR}
         />
         
@@ -238,6 +283,7 @@ const App: React.FC = () => {
               title={state.currentSong.title}
               artist={state.currentSong.artist}
               htmlContent={state.songData.lyricsHtml}
+              onRegenerate={handleRegenerate}
             />
           )}
         </div>

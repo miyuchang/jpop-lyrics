@@ -26,12 +26,14 @@ spiral - LONGMAN
 星座になれたら - 結束バンド
 宇宙を見上げて - saya
 タイミング〜Timing〜 - Klang Ruler
+to me - SURVIVAL COMPANY
 小さな恋のうた - MONGOL800
 departure! - 小野正利
 どうかしてる - WurtS
 Naru - ラックライフ
 裸の勇者 - Vaundy
 ハルカトオク - saya
+光るなら - Goose house
 晚餐歌 - tuki.
 ヒトミナカ - 丁
 風神 - Vaundy
@@ -45,21 +47,11 @@ REASON - ゆず
 export const SONG_LIST: SongItem[] = rawList
   .trim()
   .split('\n')
-  .map((line) => {
-    const parts = line.split(' - ');
-    if (parts.length >= 2) {
-      const title = parts[0].trim();
-      const artist = parts.slice(1).join(' - ').trim();
-      return {
-        title,
-        artist,
-        query: line.trim(),
-      };
-    }
+  .map(line => {
+    const parts = line.trim().split(' - ');
     return {
-      title: line.trim(),
-      artist: 'Unknown',
-      query: line.trim(),
+      title: parts[0],
+      artist: parts[1] || 'Unknown',
+      query: line.trim()
     };
-  })
-  .filter(item => item.title);
+  });

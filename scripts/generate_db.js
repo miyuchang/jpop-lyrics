@@ -49,12 +49,14 @@ spiral - LONGMAN
 星座になれたら - 結束バンド
 宇宙を見上げて - saya
 タイミング〜Timing〜 - Klang Ruler
+to me - SURVIVAL COMPANY
 小さな恋のうた - MONGOL800
 departure! - 小野正利
 どうかしてる - WurtS
 Naru - ラックライフ
 裸の勇者 - Vaundy
 ハルカトオク - saya
+光るなら - Goose house
 晚餐歌 - tuki.
 ヒトミナカ - 丁
 風神 - Vaundy
