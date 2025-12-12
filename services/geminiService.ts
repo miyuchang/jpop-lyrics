@@ -1,36 +1,55 @@
 import { GoogleGenAI } from "@google/genai";
 import { SongItem } from "../types";
 
-// Safely retrieve API Key supporting multiple environment patterns.
-// 1. Vite uses import.meta.env.VITE_API_KEY
-// 2. Standard bundlers use process.env.API_KEY
+// Aggressively try to find the API Key from various environment locations
 const getApiKey = () => {
-  // Try Vite / Modern ES pattern first
+  let key = '';
+
+  // 1. Try Vite / Modern ES pattern (import.meta.env)
   try {
-    // @ts-ignore - Check for Vite specific env vars
+    // @ts-ignore
     if (typeof import.meta !== 'undefined' && import.meta.env) {
       // @ts-ignore
-      if (import.meta.env.VITE_API_KEY) return import.meta.env.VITE_API_KEY;
-      // @ts-ignore
-      if (import.meta.env.API_KEY) return import.meta.env.API_KEY;
+      key = import.meta.env.VITE_API_KEY || 
+            // @ts-ignore
+            import.meta.env.REACT_APP_API_KEY || 
+            // @ts-ignore
+            import.meta.env.NEXT_PUBLIC_API_KEY || 
+            // @ts-ignore
+            import.meta.env.API_KEY || 
+            '';
     }
   } catch (e) {
     // Ignore access errors
   }
 
-  // Try Node.js / Webpack / standard process.env pattern
+  if (key) return key;
+
+  // 2. Try Standard process.env (Webpack/Node/System)
   try {
     if (typeof process !== 'undefined' && process.env) {
-      return process.env.API_KEY || '';
+      key = process.env.VITE_API_KEY || 
+            process.env.REACT_APP_API_KEY || 
+            process.env.NEXT_PUBLIC_API_KEY || 
+            process.env.API_KEY || 
+            '';
     }
   } catch (e) {
     // Ignore process undefined errors
   }
 
-  return '';
+  return key;
 };
 
 const apiKey = getApiKey();
+
+// Debugging: Log status to console (safe, reveals only first 4 chars)
+if (apiKey) {
+  console.log(`✅ API Key loaded: ${apiKey.substring(0, 4)}...`);
+} else {
+  console.error("❌ API Key not found in any environment variable (VITE_API_KEY, API_KEY, etc).");
+}
+
 const ai = new GoogleGenAI({ apiKey });
 const MODEL_NAME = 'gemini-2.5-flash';
 
@@ -158,8 +177,7 @@ export const fetchLyricsWithRuby = async (song: SongItem, onStatusChange?: (stat
   }
 
   if (!apiKey) {
-    // This error will be caught by App.tsx and displayed to the user
-    console.error("API Key is missing. Please check your Netlify Environment Variables.");
+    console.error("API Key is missing. Check VITE_API_KEY configuration.");
     throw new Error("API Key is missing");
   }
 
