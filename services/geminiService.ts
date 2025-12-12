@@ -1,7 +1,20 @@
 import { GoogleGenAI } from "@google/genai";
 import { SongItem } from "../types";
 
-const apiKey = process.env.API_KEY || '';
+// Safely retrieve API Key.
+// Note: We use a simple try-catch block to allow bundlers (like Vite/Webpack) to 
+// replace 'process.env.API_KEY' with a string literal at build time.
+// The previous check (typeof process !== 'undefined') prevented this replacement 
+// from being returned in browser environments where 'process' is undefined.
+const getApiKey = () => {
+  try {
+    return process.env.API_KEY || '';
+  } catch (e) {
+    return '';
+  }
+};
+
+const apiKey = getApiKey();
 const ai = new GoogleGenAI({ apiKey });
 const MODEL_NAME = 'gemini-2.5-flash';
 
@@ -128,7 +141,11 @@ export const fetchLyricsWithRuby = async (song: SongItem, onStatusChange?: (stat
     return staticDb[song.query];
   }
 
-  if (!apiKey) throw new Error("API Key missing");
+  if (!apiKey) {
+    // This error will be caught by App.tsx and displayed to the user
+    console.error("API Key is missing. Please check your Netlify Environment Variables.");
+    throw new Error("API Key is missing");
+  }
 
   // 2. Try Search (Best Quality)
   onStatusChange?.("Web検索中..."); // Searching web

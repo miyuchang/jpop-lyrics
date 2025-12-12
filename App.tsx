@@ -124,12 +124,18 @@ const App: React.FC = () => {
         status: LoadingState.COMPLETED
       }));
 
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      let msg = "歌詞の読み込みに失敗しました。後でもう一度お試しください。";
+      
+      if (err.message && err.message.includes("API Key is missing")) {
+        msg = "⚠️ API Keyエラー: Netlifyの環境変数に「API_KEY」が設定されていないか、読み込めていません。Site Settings > Environment Variablesを確認してください。";
+      }
+
       setState(prev => ({
         ...prev,
         status: LoadingState.ERROR,
-        errorMsg: "歌詞の読み込みに失敗しました。後でもう一度お試しください。"
+        errorMsg: msg
       }));
     }
   }, []);
@@ -201,7 +207,8 @@ const App: React.FC = () => {
         )}
 
         {/* Content Scroll Area */}
-        <div className="flex-1 overflow-y-auto custom-scrollbar relative w-full pb-20 md:pb-0">
+        {/* Added touch-scrolling utility for iOS smoothness */}
+        <div className="flex-1 overflow-y-auto custom-scrollbar relative w-full pb-20 md:pb-0 touch-pan-y">
           {state.status === LoadingState.IDLE && !state.currentSong && (
             <div className="h-full flex flex-col items-center justify-center text-stone-400 p-8 text-center">
               <div className="text-4xl mb-4">🎵</div>
@@ -213,7 +220,7 @@ const App: React.FC = () => {
 
           {state.status === LoadingState.ERROR && (
             <div className="h-full flex items-center justify-center p-8">
-               <div className="bg-red-50 text-red-600 p-6 rounded-lg max-w-md text-center border border-red-100">
+               <div className="bg-red-50 text-red-600 p-6 rounded-lg max-w-md text-center border border-red-100 shadow-sm">
                   <p className="font-bold mb-2">Error</p>
                   <p className="text-sm">{state.errorMsg}</p>
                   <button 
