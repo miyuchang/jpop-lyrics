@@ -87,8 +87,8 @@ const App: React.FC = () => {
         failCount++;
       }
 
-      // Small delay to prevent rate limiting issues and allow UI update
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Delay to prevent rate limiting
+      await new Promise(resolve => setTimeout(resolve, 2000));
     }
 
     setIsPreloading(false);
@@ -125,7 +125,7 @@ const App: React.FC = () => {
       const lyricsHtml = await fetchLyricsWithRuby(song);
       
       if (!lyricsHtml) {
-        throw new Error("Lyrics could not be found or generated.");
+        throw new Error("Lyrics could not be found.");
       }
 
       try {
@@ -142,10 +142,14 @@ const App: React.FC = () => {
 
     } catch (err: any) {
       console.error(err);
-      let msg = "歌詞の読み込みに失敗しました。後でもう一度お試しください。";
+      let msg = "歌詞の取得に失敗しました。";
       
-      if (err.message && err.message.includes("API Key is missing")) {
-        msg = "⚠️ API Key設定エラー\n\nNetlifyのEnvironment Variablesで「VITE_API_KEY」のValueがEmpty(空)になっていませんか？\n\n1. AIza...で始まるキーをValueに入力して保存。\n2. 必ず「Redeploy」を実行してください。";
+      if (err.message && err.message.includes("Lyrics Not Found")) {
+        msg = "⚠️ 歌詞が見つかりませんでした。\n\nWeb上に公式歌詞データが存在しないか、AIがアクセスできませんでした。";
+      } else if (err.message && err.message.includes("API Key is missing")) {
+        msg = "⚠️ API Key設定エラー\n\n環境変数設定を確認してください。";
+      } else {
+        msg = "通信エラーが発生しました。\n\n・電波の良い場所で再試行してください\n・APIの制限の可能性があります";
       }
 
       setState(prev => ({
@@ -179,7 +183,7 @@ const App: React.FC = () => {
     const cacheKey = CACHE_PREFIX + state.currentSong.query;
     localStorage.removeItem(cacheKey);
 
-    // 2. Trigger fetch again (which naturally ignores cache now)
+    // 2. Trigger fetch again
     handleSongSelect(state.currentSong);
   }, [state.currentSong, handleSongSelect]);
 
@@ -188,10 +192,10 @@ const App: React.FC = () => {
   };
 
   return (
-    // Use h-[100dvh] for mobile browsers to handle address bar height correctly
+    // Use h-[100dvh] for mobile browsers
     <div className="flex h-[100dvh] w-screen overflow-hidden bg-[#faf9f6]">
       
-      {/* Sidebar: Song List & Controls */}
+      {/* Sidebar */}
       <div 
         className={`
           fixed inset-0 z-40 bg-stone-50 transition-transform duration-300 ease-in-out flex flex-col 
@@ -207,7 +211,7 @@ const App: React.FC = () => {
           isLoading={state.status !== LoadingState.IDLE && state.status !== LoadingState.COMPLETED && state.status !== LoadingState.ERROR}
         />
         
-        {/* Bottom Action Area (Sticky) */}
+        {/* Bottom Action Area */}
         <div className="shrink-0 p-4 pb-8 md:pb-4 border-t border-stone-200 bg-white md:bg-stone-50 z-20">
            <button
              onClick={handlePreloadAll}
@@ -238,7 +242,7 @@ const App: React.FC = () => {
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col h-full relative w-full md:w-auto bg-[#faf9f6]">
         
-        {/* Mobile Back Button (Floating) */}
+        {/* Mobile Back Button */}
         {!isMobileListVisible && (
           <button 
             onClick={handleBackToList}
@@ -252,7 +256,6 @@ const App: React.FC = () => {
         )}
 
         {/* Content Scroll Area */}
-        {/* Added touch-scrolling utility for iOS smoothness */}
         <div className="flex-1 overflow-y-auto custom-scrollbar relative w-full pb-20 md:pb-0 touch-pan-y">
           {state.status === LoadingState.IDLE && !state.currentSong && (
             <div className="h-full flex flex-col items-center justify-center text-stone-400 p-8 text-center">
@@ -265,14 +268,17 @@ const App: React.FC = () => {
 
           {state.status === LoadingState.ERROR && (
             <div className="h-full flex items-center justify-center p-8">
-               <div className="bg-red-50 text-red-600 p-6 rounded-lg max-w-md text-center border border-red-100 shadow-sm">
-                  <p className="font-bold mb-2">Error</p>
-                  <p className="text-sm whitespace-pre-line text-left leading-relaxed">{state.errorMsg}</p>
+               <div className="bg-red-50 text-red-600 p-6 rounded-lg max-w-md text-center border border-red-100 shadow-sm animate-fadeIn">
+                  <p className="font-bold mb-3 text-lg">Oops!</p>
+                  <p className="text-sm whitespace-pre-line text-left leading-relaxed mb-6">{state.errorMsg}</p>
                   <button 
                     onClick={() => state.currentSong && handleSongSelect(state.currentSong)}
-                    className="mt-4 px-4 py-2 bg-white border border-red-200 rounded-full text-xs font-bold uppercase tracking-wider hover:bg-red-50 transition-colors"
+                    className="
+                      w-full px-6 py-3 bg-white border border-red-200 text-red-600 font-bold rounded-lg 
+                      hover:bg-red-50 hover:border-red-300 transition-all shadow-sm active:scale-95
+                    "
                   >
-                    Retry
+                    再試行 (Retry)
                   </button>
                </div>
             </div>
