@@ -123,6 +123,56 @@ const performSearch = async (targetQuery: string, instructions: string): Promise
 };
 
 /**
+ * Fallback Function: Memory Recall
+ * Uses the model's internal training data to generate lyrics if search fails.
+ */
+const performMemoryRecall = async (title: string, artist: string): Promise<string | null> => {
+  const prompt = `
+    TASK: Recall the official lyrics for the following Japanese song from your training data.
+    
+    SONG: ${title}
+    ARTIST: ${artist}
+
+    INSTRUCTIONS:
+    1. Output the FULL Japanese lyrics accurately.
+    2. Do not summarize or output only a part.
+    3. Do not include markdown code blocks.
+    4. If you do not know this song at all, strictly return "NOT_FOUND".
+  `;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: MODEL_SEARCH, // Flash is good enough for recall
+      contents: prompt,
+      config: {
+        temperature: 0.1, // Low temp for accuracy
+        safetySettings: SAFETY_SETTINGS,
+      },
+    });
+
+    let text = response.text?.trim();
+    
+    if (text) {
+      text = text.replace(/^```(html|json|text)?/, '').replace(/```$/, '').trim();
+    }
+
+    if (!text || text.includes("NOT_FOUND") || text.length < 20) {
+      return null;
+    }
+
+    // Japanese check
+    if (!/[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/.test(text)) {
+      return null;
+    }
+
+    return text;
+  } catch (e) {
+    console.warn("Memory recall failed", e);
+    return null;
+  }
+};
+
+/**
  * Formatter Function
  * Takes raw text and adds Ruby tags.
  */
@@ -189,32 +239,46 @@ export const fetchLyricsWithRuby = async (song: SongItem, onStatusChange?: (stat
 
   if (!apiKey) throw new Error("API Key is missing");
 
-  // --- STRATEGY: Hybrid Search ---
-  // We removed strict "site:" operators because they can cause "Not Found" errors if Google hasn't indexed specific pages recently.
-  // Instead, we encourage the AI to prioritize those sources via prompt engineering.
-  
   onStatusChange?.("Web検索中...");
-  
-  // Use a natural, high-signal query
   const query = `${song.title} ${song.artist} 歌詞`;
   
-  const result = await performSearch(query, 
-    "Prioritize finding lyrics from Musixmatch, LyricFind, or Uta-Net. If the search result snippet is truncated but confirms the song exists, use your internal knowledge to output the full official lyrics."
+  // --- STRATEGY 1: Search Tool ---
+  let rawText: string | null = null;
+  let sources: string[] = [];
+  
+  const searchResult = await performSearch(query, 
+    "Prioritize finding lyrics from Musixmatch, LyricFind, or Uta-Net. If truncated, use internal knowledge to complete."
   );
 
-  // 4. Fail if nothing found
-  if (!result) {
+  if (searchResult) {
+    rawText = searchResult.text;
+    sources = searchResult.sources;
+  } else {
+    // --- STRATEGY 2: Memory Recall Fallback ---
+    // If search fails (e.g., due to deployment IP restrictions or no results),
+    // try to generate from internal knowledge.
+    onStatusChange?.("検索失敗...知識ベースから復元中...");
+    console.log("Search failed, attempting memory recall for:", song.title);
+    
+    const memoryResult = await performMemoryRecall(song.title, song.artist);
+    if (memoryResult) {
+      rawText = memoryResult;
+    }
+  }
+
+  // 4. Fail if both strategies failed
+  if (!rawText) {
     console.error(`Lyrics not found for ${song.title}`);
     throw new Error("Lyrics Not Found on Web");
   }
 
   // 5. Format Result
   onStatusChange?.("解析・ふりがな付与中...");
-  let html = await formatLyrics(result.text);
+  let html = await formatLyrics(rawText);
 
   // Add Source Attribution
-  if (result.sources.length > 0) {
-    const sourceListHtml = result.sources.slice(0, 3)
+  if (sources.length > 0) {
+    const sourceListHtml = sources.slice(0, 3)
       .map(url => {
         try {
           return `<a href="${url}" target="_blank" style="color:#a8a29e;text-decoration:underline;margin-right:10px;">${new URL(url).hostname}</a>`;
@@ -222,6 +286,8 @@ export const fetchLyricsWithRuby = async (song: SongItem, onStatusChange?: (stat
       })
       .join('');
     html += `<div style="margin-top:40px;padding-top:20px;border-top:1px solid #e7e5e4;font-size:0.75rem;color:#a8a29e;"><p>出典 (Search):</p>${sourceListHtml}</div>`;
+  } else {
+     html += `<div style="margin-top:40px;padding-top:20px;border-top:1px solid #e7e5e4;font-size:0.75rem;color:#a8a29e;"><p>出典: Gemini AI Internal Knowledge</p></div>`;
   }
 
   return html;
