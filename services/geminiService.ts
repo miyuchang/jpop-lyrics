@@ -63,17 +63,20 @@ const simpleFormat = (text: string) => text.split('\n').map(line => line.trim())
  */
 const performSearch = async (targetQuery: string, instructions: string): Promise<{text: string, sources: string[]} | null> => {
   const prompt = `
-    TASK: Use the Google Search tool to find lyrics.
+    TASK: Find the Japanese lyrics for the song.
     
-    SEARCH QUERY TO EXECUTE:
+    SEARCH QUERY:
     ${targetQuery}
 
     INSTRUCTIONS:
     ${instructions}
 
-    If the lyrics text is found, output it directly.
-    Do not output markdown code blocks. Just the raw text.
-    If absolutely NOT FOUND, return "NOT_FOUND".
+    CRITICAL:
+    1. If the search results contain the full lyrics, extract them directly.
+    2. **IMPORTANT**: Lyrics websites often hide full text in search snippets. If you find the song in search results (e.g., on Musixmatch, Uta-Net) but the text is truncated, **USE YOUR INTERNAL KNOWLEDGE TO COMPLETE THE LYRICS ACCURATELY**.
+    3. Output the FULL Japanese lyrics text.
+    4. Do not output markdown or explanations. Just the lyrics.
+    5. If absolutely unsure and cannot reconstruct, return "NOT_FOUND".
   `;
 
   try {
@@ -82,14 +85,14 @@ const performSearch = async (targetQuery: string, instructions: string): Promise
       contents: prompt,
       config: {
         tools: [{ googleSearch: {} }],
-        temperature: 0.1,
+        temperature: 0.2, // Slightly higher to allow knowledge completion
         safetySettings: SAFETY_SETTINGS,
       },
     });
 
     let text = response.text?.trim();
     
-    // Clean up potential markdown blocks from search result
+    // Clean up potential markdown blocks
     if (text) {
       text = text.replace(/^```(html|json|text)?/, '').replace(/```$/, '').trim();
     }
@@ -99,7 +102,7 @@ const performSearch = async (targetQuery: string, instructions: string): Promise
       return null;
     }
 
-    // Check for Japanese characters (Hiragana/Katakana/Kanji) to ensure we didn't get an English translation
+    // Check for Japanese characters
     const hasJapanese = /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/.test(text);
     if (!hasJapanese) {
       console.warn("Search returned text, but no Japanese characters found. Discarding.");
@@ -135,9 +138,9 @@ const formatLyrics = async (rawLyrics: string): Promise<string> => {
     CRITICAL RULES:
     1. **WRAP EVERY KANJI**: Use <ruby>Kanji<rt>Kana</rt></ruby>.
        - Example: 明日 -> <ruby>明日<rt>あした</rt></ruby>
-       - Example: 運命 -> <ruby>運命<rt>さだめ</rt></ruby> (Use context for reading!)
+       - Example: 運命 -> <ruby>運命<rt>さだめ</rt></ruby>
     2. **KEEP FORMAT**: Use <br/> for line breaks. Do not merge lines.
-    3. **OUTPUT ONLY HTML**: Do not output markdown (\`\`\`). Do not output "Here is the HTML".
+    3. **OUTPUT ONLY HTML**: Do not output markdown (\`\`\`). 
     4. **NO TRANSLATION**: Keep the original Japanese lyrics exactly as they are.
 
     OUTPUT EXPECTATION:
@@ -150,7 +153,7 @@ const formatLyrics = async (rawLyrics: string): Promise<string> => {
       model: MODEL_SEARCH,
       contents: formatPrompt,
       config: {
-        temperature: 0.1, // Zero creativity, pure formatting
+        temperature: 0.1,
         safetySettings: SAFETY_SETTINGS,
       },
     });
@@ -158,17 +161,10 @@ const formatLyrics = async (rawLyrics: string): Promise<string> => {
     let html = response.text?.trim();
     if (!html) throw new Error("Empty format response");
     
-    // Clean markdown if present
     html = html.replace(/^```html/, '').replace(/^```/, '').replace(/```$/, '');
 
-    // Validation: If no ruby tags are found, something went wrong.
-    // However, if the song is purely Hiragana/Katakana/English (rare), this might trigger falsely.
-    // We'll check if there were Kanjis in the input vs ruby tags in output.
     const hasKanjiInput = /[\u4E00-\u9FAF]/.test(rawLyrics);
     if (hasKanjiInput && !html.includes('<ruby>')) {
-        console.warn("Format warning: Input had Kanji but output has no Ruby tags.");
-        // We could throw here to trigger fallback, but fallback is plain text anyway.
-        // Let's assume the user prefers plain text over nothing, but append a warning.
         return html + `<div style="margin-top:20px;font-size:0.75rem;color:#f87171;">※AIがふりがなを生成できませんでした。</div>`;
     }
     
@@ -193,25 +189,18 @@ export const fetchLyricsWithRuby = async (song: SongItem, onStatusChange?: (stat
 
   if (!apiKey) throw new Error("API Key is missing");
 
-  // --- STRATEGY 1: SURGICAL STRIKE (Musixmatch/LyricFind) ---
-  // We use "site:" operators to force Google to look ONLY at the best sources.
-  onStatusChange?.("Web検索中 (Musixmatch/LyricFind)...");
+  // --- STRATEGY: Hybrid Search ---
+  // We removed strict "site:" operators because they can cause "Not Found" errors if Google hasn't indexed specific pages recently.
+  // Instead, we encourage the AI to prioritize those sources via prompt engineering.
   
-  const siteOperators = 'site:musixmatch.com OR site:lyricfind.com OR site:utaten.com OR site:uta-net.com OR site:j-lyric.net';
-  const strictQuery = `${song.title} ${song.artist} ${siteOperators}`;
+  onStatusChange?.("Web検索中...");
   
-  let result = await performSearch(strictQuery, 
-    "Navigate to the search result from Musixmatch, LyricFind, or Uta-Net. Extract the full Japanese lyrics text exactly."
+  // Use a natural, high-signal query
+  const query = `${song.title} ${song.artist} 歌詞`;
+  
+  const result = await performSearch(query, 
+    "Prioritize finding lyrics from Musixmatch, LyricFind, or Uta-Net. If the search result snippet is truncated but confirms the song exists, use your internal knowledge to output the full official lyrics."
   );
-
-  // --- STRATEGY 2: BROAD SEARCH (Fallback) ---
-  if (!result) {
-    onStatusChange?.("詳細検索中 (一般検索)...");
-    const broadQuery = `${song.title} ${song.artist} 歌詞 日本語`;
-    result = await performSearch(broadQuery, 
-      "Search for the official lyrics text. Do not generate fake lyrics. If not found, strictly return NOT_FOUND."
-    );
-  }
 
   // 4. Fail if nothing found
   if (!result) {
