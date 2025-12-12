@@ -1,17 +1,33 @@
 import { GoogleGenAI } from "@google/genai";
 import { SongItem } from "../types";
 
-// Safely retrieve API Key.
-// Note: We use a simple try-catch block to allow bundlers (like Vite/Webpack) to 
-// replace 'process.env.API_KEY' with a string literal at build time.
-// The previous check (typeof process !== 'undefined') prevented this replacement 
-// from being returned in browser environments where 'process' is undefined.
+// Safely retrieve API Key supporting multiple environment patterns.
+// 1. Vite uses import.meta.env.VITE_API_KEY
+// 2. Standard bundlers use process.env.API_KEY
 const getApiKey = () => {
+  // Try Vite / Modern ES pattern first
   try {
-    return process.env.API_KEY || '';
+    // @ts-ignore - Check for Vite specific env vars
+    if (typeof import.meta !== 'undefined' && import.meta.env) {
+      // @ts-ignore
+      if (import.meta.env.VITE_API_KEY) return import.meta.env.VITE_API_KEY;
+      // @ts-ignore
+      if (import.meta.env.API_KEY) return import.meta.env.API_KEY;
+    }
   } catch (e) {
-    return '';
+    // Ignore access errors
   }
+
+  // Try Node.js / Webpack / standard process.env pattern
+  try {
+    if (typeof process !== 'undefined' && process.env) {
+      return process.env.API_KEY || '';
+    }
+  } catch (e) {
+    // Ignore process undefined errors
+  }
+
+  return '';
 };
 
 const apiKey = getApiKey();

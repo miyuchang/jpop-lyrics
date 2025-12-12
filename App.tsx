@@ -129,7 +129,7 @@ const App: React.FC = () => {
       let msg = "歌詞の読み込みに失敗しました。後でもう一度お試しください。";
       
       if (err.message && err.message.includes("API Key is missing")) {
-        msg = "⚠️ API Keyエラー: Netlifyの環境変数に「API_KEY」が設定されていないか、読み込めていません。Site Settings > Environment Variablesを確認してください。";
+        msg = "⚠️ API Key設定エラー\n\nNetlifyのEnvironment Variablesを確認してください。\n\n1. 変数名を「VITE_API_KEY」に変更してください。\n2. 設定変更後、必ず「Redeploy」を実行してください。";
       }
 
       setState(prev => ({
@@ -222,7 +222,7 @@ const App: React.FC = () => {
             <div className="h-full flex items-center justify-center p-8">
                <div className="bg-red-50 text-red-600 p-6 rounded-lg max-w-md text-center border border-red-100 shadow-sm">
                   <p className="font-bold mb-2">Error</p>
-                  <p className="text-sm">{state.errorMsg}</p>
+                  <p className="text-sm whitespace-pre-line">{state.errorMsg}</p>
                   <button 
                     onClick={() => state.currentSong && handleSongSelect(state.currentSong)}
                     className="mt-4 px-4 py-2 bg-white border border-red-200 rounded-full text-xs font-bold uppercase tracking-wider hover:bg-red-50 transition-colors"
