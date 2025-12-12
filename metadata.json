@@ -1,0 +1,5 @@
+{
+  "name": "J-Pop Lyricist",
+  "description": "A Japanese song practice app that automatically finds official YouTube videos and generates furigana lyrics using Gemini AI.",
+  "requestFramePermissions": []
+}

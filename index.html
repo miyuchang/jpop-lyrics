@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>J-Pop Lyricist</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+      /* Global Font Settings */
+      body {
+        font-family: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "BIZ UDPGothic", "Noto Sans JP", sans-serif;
+        background-color: #fdfbf7;
+        color: #2d3748;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      /* Custom scrollbar */
+      .custom-scrollbar::-webkit-scrollbar {
+        width: 6px;
+      }
+      .custom-scrollbar::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      .custom-scrollbar::-webkit-scrollbar-thumb {
+        background-color: #e2e8f0;
+        border-radius: 20px;
+      }
+
+      /* --- Optimized Ruby (Furigana) Styling --- */
+      ruby {
+        ruby-align: center; /* Center align furigana */
+        ruby-position: over;
+      }
+      
+      rt {
+        font-family: "Hiragino Sans", "Hiragino Kaku Gothic ProN", sans-serif;
+        font-size: 0.5em; /* Keep furigana small (50% of kanji) to prevent widening */
+        font-weight: 400; /* Normal weight for better legibility at small sizes */
+        color: #718096;   /* Muted color for the reading */
+        user-select: none;
+        line-height: 1;   /* Tight line height for rt */
+        letter-spacing: -0.02em; /* Slightly squeeze letters if needed */
+      }
+    </style>
+    <script type="importmap">
+    {
+      "imports": {
+        "react/": "https://esm.sh/react@^19.2.3/",
+        "react": "https://esm.sh/react@^19.2.3",
+        "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+        "@google/genai": "https://esm.sh/@google/genai@^1.33.0",
+        "path": "https://esm.sh/path@^0.12.7",
+        "fs": "https://esm.sh/fs@^0.0.1-security"
+      }
+    }
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>
